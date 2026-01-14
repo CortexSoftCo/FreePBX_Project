@@ -1,0 +1,467 @@
+{
+  "name": "N8N_Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "elevenlabs-callback",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -688,
+        112
+      ],
+      "id": "cd92f127-ebdf-4885-bb2e-bec4235441d1",
+      "name": "Webhook",
+      "webhookId": "28a725dc-06a0-4965-b182-914de30b6d52"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "201a64ee-6e3c-4a7e-85d5-956168be3d6a",
+              "name": "conversationId",
+              "value": "={{ $json.body.data.conversation_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8eb559ae-a687-413a-b69d-3d1e06b7ed40",
+              "name": "=agentId",
+              "value": "={{ $json.body.data.agent_id }}",
+              "type": "string"
+            },
+            {
+              "id": "885dddaf-56ff-4ff7-a300-902ce103ec2e",
+              "name": "callStatus",
+              "value": "={{ $json.body.data.metadata.call_duration_secs }}",
+              "type": "string"
+            },
+            {
+              "id": "9e384be8-e069-44c8-92e9-3fc81a5e647a",
+              "name": "callerPhone",
+              "value": "={{ $json.body.data.metadata.phone_call.external_number }}",
+              "type": "string"
+            },
+            {
+              "id": "d69f8442-936f-44a6-990f-0c9b0b943e5c",
+              "name": "agentPhone",
+              "value": "={{ $json.body.data.metadata.phone_call.agent_number }}",
+              "type": "string"
+            },
+            {
+              "id": "0e8bf5aa-1226-4908-8264-49d55619230a",
+              "name": "terminationReason",
+              "value": "={{ $json.body.data.metadata.termination_reason }}",
+              "type": "string"
+            },
+            {
+              "id": "9086d1b9-e27e-441b-8b1f-8143eb057384",
+              "name": "transferUsed",
+              "value": "={{ $json.body.data.metadata.features_usage.transfer_to_number.used }}",
+              "type": "string"
+            },
+            {
+              "id": "bdd54c82-0cd1-4851-b67d-80bc3e7cdc17",
+              "name": "startTime",
+              "value": "={{ $json.body.data.metadata.start_time_unix_secs }}",
+              "type": "string"
+            },
+            {
+              "id": "53b937a6-a9f4-4141-b57a-758439a0c2f9",
+              "name": "callSummary",
+              "value": "={{ $json.body.data.analysis.transcript_summary }}",
+              "type": "string"
+            },
+            {
+              "id": "adfde550-4a56-4487-a181-43bc948679d0",
+              "name": "callSuccessful",
+              "value": "={{ $json.body.data.analysis.call_successful }}",
+              "type": "string"
+            },
+            {
+              "id": "dbca50f1-8d6e-4e90-aa39-c3a4fa4f2d6d",
+              "name": "rawTranscript",
+              "value": "={{ JSON.stringify($json.body.data.transcript) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -480,
+        112
+      ],
+      "id": "33b0f520-552a-41cb-8da0-2d186d59e2ca",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f5d98266-86b2-4777-8792-cf1239d371a5",
+              "leftValue": "={{ $json.body.data.status }}",
+              "rightValue": "done",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -256,
+        112
+      ],
+      "id": "4f4df296-0b93-44f2-b0a7-e8e9d04a9df9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the raw transcript array\nconst transcriptArray = JSON.parse($json.rawTranscript || '[]');\n\n// Convert transcript array to readable text\nlet fullTranscript = '';\ntranscriptArray.forEach(turn => {\n  if (turn.message) {\n    const speaker = turn.role === 'agent' ? 'Agent' : 'Customer';\n    fullTranscript += `${speaker}: ${turn.message}\\n\\n`;\n  }\n});\n\n// Initialize data object\nconst callerData = {\n  name: '',\n  phone: $json.callerPhone,\n  email: '',\n  orderNumber: '',\n  summary: '',\n  sentiment: 'neutral'\n};\n\n// Extract Name (patterns: \"my name is X\", \"I'm X\", \"this is X\")\nconst namePatterns = [\n  /(?:my name is|i'm|this is|i am)\\s+([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)?)/i,\n  /(?:call me|you can call me)\\s+([A-Z][a-z]+)/i\n];\n\nfor (const pattern of namePatterns) {\n  const match = fullTranscript.match(pattern);\n  if (match) {\n    callerData.name = match[1];\n    break;\n  }\n}\n\n// Extract Email\nconst emailMatch = fullTranscript.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\\.[a-zA-Z0-9_-]+)/);\nif (emailMatch) {\n  callerData.email = emailMatch[1];\n}\n\n// Extract Order Number (patterns: #12345, order 12345, Order #12345)\nconst orderMatch = fullTranscript.match(/(?:order|order number|#)\\s*#?(\\d{4,10})/i);\nif (orderMatch) {\n  callerData.orderNumber = orderMatch[1];\n}\n\n// Use AI-generated summary if available, otherwise create one\ncallerData.summary = $json.callSummary || \n  (fullTranscript.length > 200 ? fullTranscript.substring(0, 200) + '...' : fullTranscript);\n\n// Basic Sentiment Analysis\nconst transcriptLower = fullTranscript.toLowerCase();\nif (/frustrated|angry|upset|terrible|awful|horrible|disappointed|mad/.test(transcriptLower)) {\n  callerData.sentiment = 'negative';\n} else if (/thank|thanks|great|excellent|wonderful|happy|satisfied|perfect|appreciate/.test(transcriptLower)) {\n  callerData.sentiment = 'positive';\n}\n\n// Check if transfer was used\nconst wasTransferred = $json.transferUsed === true;\n\n// Format timestamp\nconst timestamp = new Date($json.startTime * 1000).toLocaleString('en-US', {\n  dateStyle: 'full',\n  timeStyle: 'long'\n});\n\nreturn {\n  json: {\n    ...callerData,\n    fullTranscript: fullTranscript,\n    callDuration: $json.callDuration,\n    conversationId: $json.conversationId,\n    timestamp: timestamp,\n    wasTransferred: wasTransferred,\n    terminationReason: $json.terminationReason,\n    callSuccessful: $json.callSuccessful\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f2515cf8-3185-4553-8826-9a47a53af01c",
+      "name": "Extract Caller Data"
+    },
+    {
+      "parameters": {
+        "sendTo": "sa7979798@gmail.com",
+        "subject": "=Failed Call",
+        "message": "=The call was failed due to Technical issue",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -48,
+        272
+      ],
+      "id": "127c18c2-a7ce-4b8a-939b-cffcea018d0e",
+      "name": "Fail Call Message",
+      "webhookId": "d9ed9103-aad1-45c9-805c-632ab17a32f1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Hk1wFoDPK7K9B4Cv",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4",
+          "mode": "list",
+          "cachedResultName": "GPT-4"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are a data extraction specialist. Your job is to extract customer information from call transcripts with high accuracy. You should also work if data is in other language like dutch for example.\n\nExtract the following information:\n1. Full Name (first and last name)\n2. Email Address (complete email)\n3. Phone Number (if mentioned in transcript)\n4. Order Number (any order/reference number mentioned)\n5. Issue Type (categorize the main issue)\n6. Issue Summary (brief 2-3 sentence summary)\n7. Sentiment (positive, neutral, or negative)\n8. Key Issues (array of main problems mentioned)\n9. Resolved (true/false - was the issue resolved)\n\nIMPORTANT RULES:\n- If information is not found, use null (not empty string)\n- Extract complete email addresses with proper format\n- Normalize phone numbers to E.164 format if possible\n- For sentiment, analyze the overall tone of the customer\n- Issue Type must be one of: \"Order Status\", \"Billing\", \"Technical Support\", \"Product Inquiry\", \"Complaint\", \"Return/Refund\", \"General Inquiry\"\n\nRespond ONLY with valid JSON. No markdown, no explanations, just the JSON object.\nuse these informations if available\nName: {{ $json.name }}\nPhone-Number: {{ $json.phone }}\n\nFull Transcript: {{ $json.fullTranscript }}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        160
+      ],
+      "id": "5c6b7a80-0c2e-4e79-a7f8-4b737a9ecaf1",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "BpIEZhq8NVxOTT7w",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the OpenAI response - handling the actual structure you have\nconst inputData = $input.first().json;\n\n// Extract the text from the nested structure\nlet aiResponse = null;\n\n// Try different possible paths for the AI response\nif (inputData.output && inputData.output[0]) {\n  // Your structure: output[0].content[0].text\n  if (inputData.output[0].content && inputData.output[0].content[0]) {\n    aiResponse = inputData.output[0].content[0].text;\n  }\n} else if (inputData.message?.content) {\n  // Alternative structure\n  aiResponse = inputData.message.content;\n} else if (inputData.choices?.[0]?.message?.content) {\n  // Standard OpenAI structure\n  aiResponse = inputData.choices[0].message.content;\n} else if (inputData.text) {\n  // Direct text\n  aiResponse = inputData.text;\n}\n\n// Get original data from Extract Caller Data node\nconst originalData = $('Extract Caller Data').first().json;\n\nlet extractedData;\n\ntry {\n  if (!aiResponse) {\n    throw new Error('No AI response found');\n  }\n\n  // Remove markdown code blocks if present\n  const cleanResponse = aiResponse\n    .replace(/```json\\n?/g, '')\n    .replace(/```\\n?/g, '')\n    .trim();\n  \n  // Parse the JSON response\n  const parsed = JSON.parse(cleanResponse);\n  \n  // Normalize the keys (handle different naming conventions)\n  extractedData = {\n    name: parsed['Full Name'] || parsed.name || parsed.fullName || null,\n    email: parsed['Email Address'] || parsed.email || parsed.emailAddress || null,\n    phone: parsed['Phone Number'] || parsed.phone || parsed.phoneNumber || originalData.phone,\n    orderNumber: parsed['Order Number'] || parsed.orderNumber || parsed.order_number || null,\n    issueType: parsed['Issue Type'] || parsed.issueType || parsed.issue_type || 'General Inquiry',\n    summary: parsed['Issue Summary'] || parsed.summary || parsed.issueSummary || 'No summary available',\n    sentiment: (parsed.Sentiment || parsed.sentiment || 'neutral').toLowerCase(),\n    keyIssues: parsed['Key Issues'] || parsed.keyIssues || parsed.key_issues || [],\n    resolved: parsed.Resolved !== undefined ? parsed.Resolved : (parsed.resolved !== undefined ? parsed.resolved : false),\n    extractionMethod: 'AI',\n    extractionSuccess: true\n  };\n  \n  // Validate email format if present\n  if (extractedData.email) {\n    const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n    if (!emailRegex.test(extractedData.email)) {\n      extractedData.email = null;\n      extractedData.emailValidationFailed = true;\n    }\n  }\n  \n  // Add confidence scores if they exist\n  if (parsed.confidence || parsed.Confidence) {\n    extractedData.confidence = parsed.confidence || parsed.Confidence;\n  } else {\n    // Create basic confidence scores\n    extractedData.confidence = {\n      name: extractedData.name ? 90 : 0,\n      email: extractedData.email ? 95 : 0,\n      orderNumber: extractedData.orderNumber ? 90 : 0\n    };\n  }\n  \n} catch (error) {\n  // If parsing fails, create a fallback object\n  console.error('AI Extraction Failed:', error.message);\n  \n  extractedData = {\n    name: originalData.name || null,\n    email: originalData.email || null,\n    phone: originalData.phone || null,\n    orderNumber: originalData.orderNumber || null,\n    issueType: 'General Inquiry',\n    summary: originalData.summary || 'Unable to extract summary',\n    sentiment: originalData.sentiment || 'neutral',\n    keyIssues: [],\n    resolved: originalData.callSuccessful === 'success',\n    confidence: {\n      name: 0,\n      email: 0,\n      orderNumber: 0\n    },\n    extractionMethod: 'Fallback - Regex',\n    extractionSuccess: false,\n    error: error.message,\n    rawResponse: aiResponse ? aiResponse.substring(0, 200) : 'No response'\n  };\n}\n\n// Merge with original call metadata\nreturn {\n  json: {\n    // Extracted data\n    ...extractedData,\n    \n    // Original metadata from ElevenLabs\n    conversationId: originalData.conversationId,\n    timestamp: originalData.timestamp,\n    callDuration: originalData.callDuration,\n    wasTransferred: originalData.wasTransferred,\n    terminationReason: originalData.terminationReason,\n    fullTranscript: originalData.fullTranscript,\n    \n    // Add original data as backup\n    _original: {\n      phone: originalData.phone,\n      callerPhone: originalData.phone\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        160
+      ],
+      "id": "52e5feb7-f346-4acc-ba86-09964305524e",
+      "name": "PARSE AI RESPONSE"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Bkk-EtX5Z2ckbKQPUa-kTHDDIu0c3WAjECgE9PUps6s",
+          "mode": "list",
+          "cachedResultName": "Caller_Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Bkk-EtX5Z2ckbKQPUa-kTHDDIu0c3WAjECgE9PUps6s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Bkk-EtX5Z2ckbKQPUa-kTHDDIu0c3WAjECgE9PUps6s/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.name }}",
+            "Email Address": "={{ $json.email }}",
+            "Phone Number": "={{ $json.phone }}",
+            "Order Number": "={{ $json.orderNumber }}",
+            "Issue Type": "={{ $json.issueType }}",
+            "summary": "={{ $json.summary }}",
+            "sentiment": "={{ $json.sentiment }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email Address",
+              "displayName": "Email Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone Number",
+              "displayName": "Phone Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Order Number",
+              "displayName": "Order Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Issue Type",
+              "displayName": "Issue Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "keyIssues",
+              "displayName": "keyIssues",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        160
+      ],
+      "id": "82cec940-45b0-4024-856b-3d5ba7a6b87b",
+      "name": "Add a row in Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "aA0vjAaAAEU3fETK",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "info@altijd.nl",
+        "subject": "Call Result ",
+        "message": "Hello",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1152,
+        160
+      ],
+      "id": "674af5d0-27dd-4488-8b3a-800828b4e56d",
+      "name": "Send a message",
+      "webhookId": "ae57e431-7e59-4e27-9f4b-dad43ecc41bc",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Hk1wFoDPK7K9B4Cv",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Extract Caller Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Call Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Caller Data": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "PARSE AI RESPONSE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARSE AI RESPONSE": {
+      "main": [
+        [
+          {
+            "node": "Add a row in Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add a row in Sheet": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "73183bbf-e078-4f14-be12-d5ed641edbb5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b4b6e4f6c6f153cbc56f1505aaf6511ce5bff43864bff2996ab8a37f0876e379"
+  },
+  "id": "bM2Wi4G4D2szBh1D",
+  "tags": []
+}
